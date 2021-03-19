@@ -1,0 +1,8 @@
+[package]
+name = "crit-cache"
+version = "0.1.0"
+authors = ["Actyx AG <developer@actyx.com", "wngr <oliver@wngr.de>"]
+edition = "2018"
+
+
+[dependencies]
