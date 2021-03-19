@@ -149,7 +149,7 @@ impl<K: Hash + Eq, V: Weigheable<V>, S: BuildHasher> WeightCache<K, V, S> {
     pub fn put(&mut self, key: K, value: V) -> Result<(), ValueTooBigError> {
         let weight = V::measure(&value);
         if weight > self.max {
-            return Err(ValueTooBigError);
+            Err(ValueTooBigError)
         } else {
             self.current += weight;
             // did we remove an element?
