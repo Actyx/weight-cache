@@ -7,6 +7,7 @@ repository = "https://github.com/Actyx/weight-cache"
 license = "MIT OR Apache-2.0"
 categories = ["data-structures"]
 description = "A cache that holds a limited number of key-value-pairs according to a user defined criterion"
+documentation = "https://docs.rs/weight-cache"
 
 [dependencies]
 linked-hash-map = "0.5.4"
