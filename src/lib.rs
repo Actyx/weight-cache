@@ -2,13 +2,12 @@
 //! the cache is exceeded, the least-recently-used (where "used" means a look-up
 //! or putting the pair into the cache) pair is automatically removed.
 //!
-//! Contrary to the lru-cache crate[0] (which this crate is heavily inspired
-//! by!), the capacity is not the number of items in the cache, but can be given
-//! by an arbitrary criterion by implementing [`Weigheable`] for the value type
-//! V. A straight-forward example of this would be to use the allocated size of
-//! the object, and provide a total capacity which must not be exceeded by the
-//! cache.
-//! [0]:https://crates.io/crates/lru-cache
+//! Contrary to the [lru-cache](https://crates.io/crates/lru-cache) crate (which
+//! this crate is heavily inspired by!), the capacity is not the number of items
+//! in the cache, but can be given by an arbitrary criterion by implementing
+//! [`Weigheable`] for the value type V. A straight-forward example of this would
+//! be to use the allocated size of the object, and provide a total capacity
+//! which must not be exceeded by the cache.
 //!
 //! # Examples
 //!```
@@ -24,8 +23,8 @@
 //!     Crab { grams: usize },
 //! }
 //!
-//! impl Weigheable<Food> for Food {
-//!     fn measure(value: &Food) -> usize {
+//! impl Weigheable for Food {
+//!     fn measure(value: &Self) -> usize {
 //!         match value {
 //!             Food::Milk { milliliters } => milliliters * 104 / 100,
 //!             Food::Cucumber { pieces } => pieces * 158,
@@ -65,8 +64,8 @@ use std::{
     num::NonZeroUsize,
 };
 
-/// A trait to implemented for the value type, providing a way to [`measure`] the
-/// thing.
+/// A trait to implemented for the value type, providing a way to
+/// [`Weigheable::measure`] the thing.
 pub trait Weigheable {
     fn measure(value: &Self) -> usize;
 }
@@ -85,6 +84,9 @@ impl fmt::Display for ValueTooBigError {
     }
 }
 
+/// A cache that holds a limited number of key-value pairs. When the capacity of
+/// the cache is exceeded, the least-recently-used (where "used" means a look-up
+/// or putting the pair into the cache) pair is automatically removed.
 pub struct WeightCache<K, V, S = hash_map::RandomState> {
     max: usize,
     current: usize,
