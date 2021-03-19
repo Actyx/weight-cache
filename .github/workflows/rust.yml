@@ -1,4 +1,4 @@
-jame: Rust
+name: Rust
 
 on:
   push:
