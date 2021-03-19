@@ -8,7 +8,7 @@
 //! V. A straight-forward example of this would be to use the allocated size of
 //! the object, and provide a total capacity which must not be exceeded by the
 //! cache.
-//! [0]: https://crates.io/crates/lru-cache
+//! [0]:https://crates.io/crates/lru-cache
 //!
 //! # Examples
 //!```
@@ -65,8 +65,10 @@ use std::{
     num::NonZeroUsize,
 };
 
-pub trait Weigheable<V> {
-    fn measure(value: &V) -> usize;
+/// A trait to implemented for the value type, providing a way to [`measure`] the
+/// thing.
+pub trait Weigheable {
+    fn measure(value: &Self) -> usize;
 }
 
 #[derive(Debug)]
@@ -97,13 +99,13 @@ impl<K, V, S> fmt::Debug for WeightCache<K, V, S> {
     }
 }
 
-impl<K: Hash + Eq, V: Weigheable<V>> Default for WeightCache<K, V> {
+impl<K: Hash + Eq, V: Weigheable> Default for WeightCache<K, V> {
     fn default() -> Self {
         WeightCache::<K, V, RandomState>::new(NonZeroUsize::new(usize::MAX).expect("MAX > 0"))
     }
 }
 
-impl<K: Hash + Eq, V: Weigheable<V>> WeightCache<K, V> {
+impl<K: Hash + Eq, V: Weigheable> WeightCache<K, V> {
     pub fn new(capacity: NonZeroUsize) -> Self {
         Self {
             max: capacity.get(),
@@ -112,7 +114,7 @@ impl<K: Hash + Eq, V: Weigheable<V>> WeightCache<K, V> {
         }
     }
 }
-impl<K: Hash + Eq, V: Weigheable<V>, S: BuildHasher> WeightCache<K, V, S> {
+impl<K: Hash + Eq, V: Weigheable, S: BuildHasher> WeightCache<K, V, S> {
     /// Create a [`WeightCache`] with a custom hasher.
     pub fn with_hasher(capacity: NonZeroUsize, hasher: S) -> Self {
         Self {
@@ -293,8 +295,8 @@ mod test {
 
     #[derive(Clone, Debug, PartialEq)]
     struct HeavyWeight(usize);
-    impl Weigheable<HeavyWeight> for HeavyWeight {
-        fn measure(v: &HeavyWeight) -> usize {
+    impl Weigheable for HeavyWeight {
+        fn measure(v: &Self) -> usize {
             v.0
         }
     }
@@ -308,8 +310,8 @@ mod test {
     }
     #[derive(Clone, Debug, PartialEq)]
     struct UnitWeight;
-    impl Weigheable<UnitWeight> for UnitWeight {
-        fn measure(_: &UnitWeight) -> usize {
+    impl Weigheable for UnitWeight {
+        fn measure(_: &Self) -> usize {
             1
         }
     }
