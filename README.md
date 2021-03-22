@@ -7,13 +7,13 @@ or putting the pair into the cache) pair is automatically removed.
 Contrary to the [lru-cache](https://crates.io/crates/lru-cache) crate (which
 this crate is heavily inspired by!), the capacity is not the number of items
 in the cache, but can be given by an arbitrary criterion by implementing
-[`Weigheable`] for the value type V. A straight-forward example of this would
+[`Weighable`] for the value type V. A straight-forward example of this would
 be to use the allocated size of the object, and provide a total capacity
 which must not be exceeded by the cache.
 
 ## Examples
 ```rust
-use weight_cache::{Weigheable, WeightCache};
+use weight_cache::{Weighable, WeightCache};
 use std::num::NonZeroUsize;
 
 #[derive(PartialEq, Debug)]
@@ -25,7 +25,7 @@ enum Food {
     Crab { grams: usize },
 }
 
-impl Weigheable for Food {
+impl Weighable for Food {
     fn measure(value: &Self) -> usize {
         match value {
             Food::Milk { milliliters } => milliliters * 104 / 100,
@@ -45,16 +45,16 @@ assert!(cache.is_empty());
 
 cache.put(1, Food::Milk { milliliters: 100 }).unwrap();
 assert!(!cache.is_empty());
-assert_eq!(*cache.get_mut(&1).unwrap(), Food::Milk { milliliters: 100 });
+assert_eq!(*cache.get(&1).unwrap(), Food::Milk { milliliters: 100 });
 
 cache.put(2, Food::Crab { grams: 300 }).unwrap();
-assert_eq!(*cache.get_mut(&2).unwrap(), Food::Crab { grams: 300 });
-assert_eq!(*cache.get_mut(&1).unwrap(), Food::Milk { milliliters: 100 });
+assert_eq!(*cache.get(&2).unwrap(), Food::Crab { grams: 300 });
+assert_eq!(*cache.get(&1).unwrap(), Food::Milk { milliliters: 100 });
 
 cache.put(3, Food::Potato { pieces: 2 }).unwrap();
-assert_eq!(*cache.get_mut(&3).unwrap(), Food::Potato { pieces: 2});
-assert!(cache.get_mut(&2).is_none()); // 1 has been touched last
-assert_eq!(*cache.get_mut(&1).unwrap(), Food::Milk { milliliters: 100 });
+assert_eq!(*cache.get(&3).unwrap(), Food::Potato { pieces: 2});
+assert!(cache.get(&2).is_none()); // 1 has been touched last
+assert_eq!(*cache.get(&1).unwrap(), Food::Milk { milliliters: 100 });
 ```
 
 License: MIT OR Apache-2.0
