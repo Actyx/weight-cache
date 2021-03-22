@@ -1,8 +1,17 @@
 [package]
-name = "crit-cache"
-version = "0.1.0"
-authors = ["Actyx AG <developer@actyx.com", "wngr <oliver@wngr.de>"]
+name = "weight-cache"
+version = "0.2.0"
+authors = ["Actyx AG <developer@actyx.com>", "wngr <oliver@wngr.de>"]
 edition = "2018"
-
+repository = "https://github.com/Actyx/weight-cache"
+license = "MIT OR Apache-2.0"
+categories = ["data-structures"]
+description = "A cache that holds a limited number of key-value-pairs according to a user defined criterion"
+documentation = "https://docs.rs/weight-cache"
 
 [dependencies]
+linked-hash-map = "0.5.4"
+
+[dev-dependencies]
+quickcheck = "1.0.3"
+quickcheck_macros = "1.0.0"
