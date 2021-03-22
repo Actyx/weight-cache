@@ -5,13 +5,13 @@
 //! Contrary to the [lru-cache](https://crates.io/crates/lru-cache) crate (which
 //! this crate is heavily inspired by!), the capacity is not the number of items
 //! in the cache, but can be given by an arbitrary criterion by implementing
-//! [`Weigheable`] for the value type V. A straight-forward example of this would
+//! [`Weighable`] for the value type V. A straight-forward example of this would
 //! be to use the allocated size of the object, and provide a total capacity
 //! which must not be exceeded by the cache.
 //!
 //! # Examples
 //!```
-//! use weight_cache::{Weigheable, WeightCache};
+//! use weight_cache::{Weighable, WeightCache};
 //! use std::num::NonZeroUsize;
 //!
 //! #[derive(PartialEq, Debug)]
@@ -23,7 +23,7 @@
 //!     Crab { grams: usize },
 //! }
 //!
-//! impl Weigheable for Food {
+//! impl Weighable for Food {
 //!     fn measure(value: &Self) -> usize {
 //!         match value {
 //!             Food::Milk { milliliters } => milliliters * 104 / 100,
@@ -43,16 +43,16 @@
 //!
 //! cache.put(1, Food::Milk { milliliters: 100 }).unwrap();
 //! assert!(!cache.is_empty());
-//! assert_eq!(*cache.get_mut(&1).unwrap(), Food::Milk { milliliters: 100 });
+//! assert_eq!(*cache.get(&1).unwrap(), Food::Milk { milliliters: 100 });
 //!
 //! cache.put(2, Food::Crab { grams: 300 }).unwrap();
-//! assert_eq!(*cache.get_mut(&2).unwrap(), Food::Crab { grams: 300 });
-//! assert_eq!(*cache.get_mut(&1).unwrap(), Food::Milk { milliliters: 100 });
+//! assert_eq!(*cache.get(&2).unwrap(), Food::Crab { grams: 300 });
+//! assert_eq!(*cache.get(&1).unwrap(), Food::Milk { milliliters: 100 });
 //!
 //! cache.put(3, Food::Potato { pieces: 2 }).unwrap();
-//! assert_eq!(*cache.get_mut(&3).unwrap(), Food::Potato { pieces: 2});
-//! assert!(cache.get_mut(&2).is_none()); // 1 has been touched last
-//! assert_eq!(*cache.get_mut(&1).unwrap(), Food::Milk { milliliters: 100 });
+//! assert_eq!(*cache.get(&3).unwrap(), Food::Potato { pieces: 2});
+//! assert!(cache.get(&2).is_none()); // 1 has been touched last
+//! assert_eq!(*cache.get(&1).unwrap(), Food::Milk { milliliters: 100 });
 //!```
 
 use hash_map::RandomState;
@@ -65,8 +65,8 @@ use std::{
 };
 
 /// A trait to implemented for the value type, providing a way to
-/// [`Weigheable::measure`] the thing.
-pub trait Weigheable {
+/// [`Weighable::measure`] the thing.
+pub trait Weighable {
     fn measure(value: &Self) -> usize;
 }
 
@@ -84,13 +84,18 @@ impl fmt::Display for ValueTooBigError {
     }
 }
 
+struct ValueWithWeight<V> {
+    value: V,
+    weight: usize,
+}
 /// A cache that holds a limited number of key-value pairs. When the capacity of
 /// the cache is exceeded, the least-recently-used (where "used" means a look-up
-/// or putting the pair into the cache) pair is automatically removed.
+/// or putting the pair into the cache) pairs are automatically removed until the
+/// size limit is met again.
 pub struct WeightCache<K, V, S = hash_map::RandomState> {
     max: usize,
     current: usize,
-    inner: LinkedHashMap<K, V, S>,
+    inner: LinkedHashMap<K, ValueWithWeight<V>, S>,
 }
 impl<K, V, S> fmt::Debug for WeightCache<K, V, S> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -101,13 +106,13 @@ impl<K, V, S> fmt::Debug for WeightCache<K, V, S> {
     }
 }
 
-impl<K: Hash + Eq, V: Weigheable> Default for WeightCache<K, V> {
+impl<K: Hash + Eq, V: Weighable> Default for WeightCache<K, V> {
     fn default() -> Self {
         WeightCache::<K, V, RandomState>::new(NonZeroUsize::new(usize::MAX).expect("MAX > 0"))
     }
 }
 
-impl<K: Hash + Eq, V: Weigheable> WeightCache<K, V> {
+impl<K: Hash + Eq, V: Weighable> WeightCache<K, V> {
     pub fn new(capacity: NonZeroUsize) -> Self {
         Self {
             max: capacity.get(),
@@ -116,7 +121,7 @@ impl<K: Hash + Eq, V: Weigheable> WeightCache<K, V> {
         }
     }
 }
-impl<K: Hash + Eq, V: Weigheable, S: BuildHasher> WeightCache<K, V, S> {
+impl<K: Hash + Eq, V: Weighable, S: BuildHasher> WeightCache<K, V, S> {
     /// Create a [`WeightCache`] with a custom hasher.
     pub fn with_hasher(capacity: NonZeroUsize, hasher: S) -> Self {
         Self {
@@ -129,13 +134,7 @@ impl<K: Hash + Eq, V: Weigheable, S: BuildHasher> WeightCache<K, V, S> {
     /// Returns a reference to the value corresponding to the given key, if it
     /// exists.
     pub fn get(&mut self, k: &K) -> Option<&V> {
-        self.inner.get_refresh(k).map(|v| v as &V)
-    }
-
-    /// Returns a mutable reference to the value corresponding to the given key,
-    /// if it exists.
-    pub fn get_mut(&mut self, k: &K) -> Option<&mut V> {
-        self.inner.get_refresh(k)
+        self.inner.get_refresh(k).map(|v| &v.value as &V)
     }
 
     /// Returns the number of key-value pairs in the cache.
@@ -149,7 +148,7 @@ impl<K: Hash + Eq, V: Weigheable, S: BuildHasher> WeightCache<K, V, S> {
     }
 
     /// Inserts a key-value pair into the cache. Returns an error if the value is
-    /// too bigger than the cache's configured max size.
+    /// bigger than the cache's configured max size.
     pub fn put(&mut self, key: K, value: V) -> Result<(), ValueTooBigError> {
         let weight = V::measure(&value);
         if weight > self.max {
@@ -157,14 +156,8 @@ impl<K: Hash + Eq, V: Weigheable, S: BuildHasher> WeightCache<K, V, S> {
         } else {
             self.current += weight;
             // did we remove an element?
-            if let Some(x) = self.inner.insert(key, value) {
-                self.current -= V::measure(&x);
-            }
-
-            while self.current > self.max && !self.inner.is_empty() {
-                if let Some((_, v)) = self.inner.pop_front() {
-                    self.current -= V::measure(&v);
-                }
+            if let Some(x) = self.inner.insert(key, ValueWithWeight { value, weight }) {
+                self.current -= x.weight;
             }
 
             // remove elements until we're below the size boundary again
@@ -173,117 +166,19 @@ impl<K: Hash + Eq, V: Weigheable, S: BuildHasher> WeightCache<K, V, S> {
         }
     }
 
-    /// Returns an iterator over the cache's key-value pairs in least- to
-    /// most-recently-used order.
-    pub fn iter(&self) -> Iter<K, V> {
-        Iter(self.inner.iter())
-    }
-
-    /// Returns a mutable iterator over the cache's key-value pairs in least- to
-    /// most-recently-used order.
-    pub fn iter_mut(&mut self) -> IterMut<K, V> {
-        IterMut(self.inner.iter_mut())
-    }
     fn shrink_to_fit(&mut self) {
         while self.current > self.max && !self.inner.is_empty() {
             let (_, v) = self.inner.pop_front().expect("Not empty");
-            self.current -= V::measure(&v);
+            self.current -= v.weight;
         }
     }
 }
-impl<K: Hash + Eq, V, S: BuildHasher + Default> IntoIterator for WeightCache<K, V, S> {
-    type Item = (K, V);
-    type IntoIter = IntoIter<K, V>;
-    fn into_iter(self) -> Self::IntoIter {
-        IntoIter(self.inner.into_iter())
-    }
-}
-/// An iterator over a cache's key-value pairs in least- to most-recently-used
-/// order.
-#[derive(Clone)]
-pub struct IntoIter<K, V>(linked_hash_map::IntoIter<K, V>);
 
-impl<K, V> Iterator for IntoIter<K, V> {
-    type Item = (K, V);
-
-    fn next(&mut self) -> Option<(K, V)> {
-        self.0.next()
-    }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        self.0.size_hint()
-    }
-}
-
-impl<K, V> DoubleEndedIterator for IntoIter<K, V> {
-    fn next_back(&mut self) -> Option<(K, V)> {
-        self.0.next_back()
-    }
-}
-
-impl<K, V> ExactSizeIterator for IntoIter<K, V> {
-    fn len(&self) -> usize {
-        self.0.len()
-    }
-}
-/// An iterator over a cache's key-value pairs in least- to most-recently-used
-/// order.
-///
-/// Accessing a cache through the iterator does _not_ affect the cache's LRU state.
-pub struct Iter<'a, K: 'a, V: 'a>(linked_hash_map::Iter<'a, K, V>);
-
-impl<'a, K, V> Clone for Iter<'a, K, V> {
-    fn clone(&self) -> Iter<'a, K, V> {
-        Iter(self.0.clone())
-    }
-}
-
-impl<'a, K, V> Iterator for Iter<'a, K, V> {
-    type Item = (&'a K, &'a V);
-    fn next(&mut self) -> Option<(&'a K, &'a V)> {
-        self.0.next()
-    }
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        self.0.size_hint()
-    }
-}
-
-impl<'a, K, V> DoubleEndedIterator for Iter<'a, K, V> {
-    fn next_back(&mut self) -> Option<(&'a K, &'a V)> {
-        self.0.next_back()
-    }
-}
-
-impl<'a, K, V> ExactSizeIterator for Iter<'a, K, V> {
-    fn len(&self) -> usize {
-        self.0.len()
-    }
-}
-/// An iterator over a cache's key-value pairs in least- to most-recently-used
-/// order with mutable references to the values.
-///
-/// Accessing a cache through the iterator does _not_ affect the cache's LRU state.
-pub struct IterMut<'a, K: 'a, V: 'a>(linked_hash_map::IterMut<'a, K, V>);
-
-impl<'a, K, V> Iterator for IterMut<'a, K, V> {
-    type Item = (&'a K, &'a mut V);
-    fn next(&mut self) -> Option<(&'a K, &'a mut V)> {
-        self.0.next()
-    }
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        self.0.size_hint()
-    }
-}
-
-impl<'a, K, V> DoubleEndedIterator for IterMut<'a, K, V> {
-    fn next_back(&mut self) -> Option<(&'a K, &'a mut V)> {
-        self.0.next_back()
-    }
-}
-
-impl<'a, K, V> ExactSizeIterator for IterMut<'a, K, V> {
-    fn len(&self) -> usize {
-        self.0.len()
+impl<K: Hash + Eq + 'static, V: Weighable + 'static, S: BuildHasher> WeightCache<K, V, S> {
+    /// Returns an iterator over the cache's key-value pairs in least- to
+    /// most-recently-used order consuming the cache.
+    pub fn consume(self) -> Box<dyn Iterator<Item = (K, V)> + 'static> {
+        Box::new(self.inner.into_iter().map(|(k, v)| (k, v.value)))
     }
 }
 
@@ -297,7 +192,7 @@ mod test {
 
     #[derive(Clone, Debug, PartialEq)]
     struct HeavyWeight(usize);
-    impl Weigheable for HeavyWeight {
+    impl Weighable for HeavyWeight {
         fn measure(v: &Self) -> usize {
             v.0
         }
@@ -312,7 +207,7 @@ mod test {
     }
     #[derive(Clone, Debug, PartialEq)]
     struct UnitWeight;
-    impl Weigheable for UnitWeight {
+    impl Weighable for UnitWeight {
         fn measure(_: &Self) -> usize {
             1
         }
@@ -330,7 +225,7 @@ mod test {
         for (k, v) in xs.iter().enumerate() {
             cache.put(k, v.clone()).expect("empty")
         }
-        let cached = cache.into_iter().map(|x| x.1).collect::<Vec<_>>();
+        let cached = cache.consume().map(|x| x.1).collect::<Vec<_>>();
 
         assert_eq!(xs, cached);
     }
