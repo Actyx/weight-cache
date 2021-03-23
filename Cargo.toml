@@ -1,6 +1,6 @@
 [package]
 name = "weight-cache"
-version = "0.2.1"
+version = "0.2.2"
 authors = ["Actyx AG <developer@actyx.com>", "wngr <oliver@wngr.de>"]
 edition = "2018"
 repository = "https://github.com/Actyx/weight-cache"
@@ -11,7 +11,12 @@ documentation = "https://docs.rs/weight-cache"
 
 [dependencies]
 linked-hash-map = "0.5.4"
+prometheus = { version = "0.12.0", optional = true }
 
 [dev-dependencies]
 quickcheck = "1.0.3"
 quickcheck_macros = "1.0.0"
+
+[features]
+default = []
+metrics = ["prometheus"]

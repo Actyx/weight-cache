@@ -57,4 +57,10 @@ assert!(cache.get(&2).is_none()); // 1 has been touched last
 assert_eq!(*cache.get(&1).unwrap(), Food::Milk { milliliters: 100 });
 ```
 
+## Feature flags
+
+* `metrics`: Enables metric gathering on the cache. Register a
+[`prometheus::Registry`] with a call to [`WeightCache::register`]; set a
+custom metric namespace with [`WeightCache::new_with_namespace`]
+
 License: MIT OR Apache-2.0
