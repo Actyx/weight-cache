@@ -58,14 +58,15 @@
 //! # Feature flags
 //!
 //! * `metrics`: Enables metric gathering on the cache. Register a
-//!              [`prometheus::Registry`] with a call to [`WeightCache::register`]
+//! [`prometheus::Registry`] with a call to [`WeightCache::register`]; set a
+//! custom metric namespace with [`WeightCache::new_with_namespace`]
 
 use hash_map::RandomState;
 use linked_hash_map::LinkedHashMap;
 #[cfg(feature = "metrics")]
 use prometheus::{
     core::{AtomicU64, GenericCounter, GenericGauge},
-    Registry,
+    Opts, Registry,
 };
 use std::{
     collections::hash_map,
@@ -133,21 +134,53 @@ struct Metrics {
     size: GenericGauge<AtomicU64>,
 }
 #[cfg(feature = "metrics")]
-impl Default for Metrics {
-    fn default() -> Self {
-        let cache_size = GenericGauge::new("cache_size", "Current size of the cache").unwrap();
-        cache_size.set(0);
-        Self {
-            hits: GenericCounter::new("cache_hit", "Number of cache hits").unwrap(),
-            misses: GenericCounter::new("cache_miss", "Number of cache misses").unwrap(),
-            inserts: GenericCounter::new("cache_insert", "Number of successful cache insertions")
-                .unwrap(),
-            inserts_fail: GenericCounter::new(
-                "cache_insert_fail",
-                "Number of failed cache insertions",
+impl Metrics {
+    fn new(namespace: Option<&str>) -> Self {
+        if let Some(namespace) = namespace {
+            let cache_size = GenericGauge::with_opts(
+                Opts::new("cache_size", "Current size of the cache").namespace(namespace),
             )
-            .unwrap(),
-            size: cache_size,
+            .unwrap();
+            cache_size.set(0);
+            Self {
+                hits: GenericCounter::with_opts(
+                    Opts::new("cache_hit", "Number of cache hits").namespace(namespace),
+                )
+                .unwrap(),
+                misses: GenericCounter::with_opts(
+                    Opts::new("cache_miss", "Number of cache misses").namespace(namespace),
+                )
+                .unwrap(),
+                inserts: GenericCounter::with_opts(
+                    Opts::new("cache_insert", "Number of successful cache insertions")
+                        .namespace(namespace),
+                )
+                .unwrap(),
+                inserts_fail: GenericCounter::with_opts(
+                    Opts::new("cache_insert_fail", "Number of failed cache insertions")
+                        .namespace(namespace),
+                )
+                .unwrap(),
+                size: cache_size,
+            }
+        } else {
+            let cache_size = GenericGauge::new("cache_size", "Current size of the cache").unwrap();
+            cache_size.set(0);
+            Self {
+                hits: GenericCounter::new("cache_hit", "Number of cache hits").unwrap(),
+                misses: GenericCounter::new("cache_miss", "Number of cache misses").unwrap(),
+                inserts: GenericCounter::new(
+                    "cache_insert",
+                    "Number of successful cache insertions",
+                )
+                .unwrap(),
+                inserts_fail: GenericCounter::new(
+                    "cache_insert_fail",
+                    "Number of failed cache insertions",
+                )
+                .unwrap(),
+                size: cache_size,
+            }
         }
     }
 }
@@ -159,7 +192,16 @@ impl<K: Hash + Eq, V: Weighable> WeightCache<K, V> {
             current: 0,
             inner: LinkedHashMap::new(),
             #[cfg(feature = "metrics")]
-            metrics: Metrics::default(),
+            metrics: Metrics::new(None),
+        }
+    }
+    #[cfg(feature = "metrics")]
+    pub fn new_with_namespace(capacity: NonZeroUsize, metrics_namespace: Option<&str>) -> Self {
+        Self {
+            max: capacity.get(),
+            current: 0,
+            inner: LinkedHashMap::new(),
+            metrics: Metrics::new(metrics_namespace),
         }
     }
 }
@@ -171,7 +213,7 @@ impl<K: Hash + Eq, V: Weighable, S: BuildHasher> WeightCache<K, V, S> {
             current: 0,
             inner: LinkedHashMap::with_hasher(hasher),
             #[cfg(feature = "metrics")]
-            metrics: Metrics::default(),
+            metrics: Metrics::new(None),
         }
     }
     #[cfg(feature = "metrics")]
@@ -301,9 +343,9 @@ mod test {
     }
 
     #[cfg(feature = "metrics")]
-    #[test]
-    fn should_gather_metrics() {
-        let mut cache = WeightCache::<usize, UnitWeight>::new(3.try_into().unwrap());
+    fn metrics_test(namespace: Option<&str>) {
+        let mut cache =
+            WeightCache::<usize, UnitWeight>::new_with_namespace(3.try_into().unwrap(), namespace);
         let registry = Registry::new();
         cache.register(&registry).unwrap();
         for i in 0usize..5 {
@@ -315,24 +357,60 @@ mod test {
         for metric in registry.gather() {
             println!("{} {:?}", metric.get_name(), metric.get_metric()[0]);
             match metric.get_name() {
-                "cache_size" => {
+                x if x
+                    == format!(
+                        "{}cache_size",
+                        namespace.map(|y| format!("{}_", y)).unwrap_or_default()
+                    ) =>
+                {
                     assert_eq!(3, metric.get_metric()[0].get_gauge().get_value() as usize)
                 }
-                "cache_insert" => {
+
+                x if x
+                    == format!(
+                        "{}cache_insert",
+                        namespace.map(|y| format!("{}_", y)).unwrap_or_default()
+                    ) =>
+                {
                     assert_eq!(5, metric.get_metric()[0].get_counter().get_value() as usize)
                 }
-                "cache_insert_fail" => {
+
+                x if x
+                    == format!(
+                        "{}cache_insert_fail",
+                        namespace.map(|y| format!("{}_", y)).unwrap_or_default()
+                    ) =>
+                {
                     assert_eq!(0, metric.get_metric()[0].get_counter().get_value() as usize)
                 }
-                "cache_hit" => {
+
+                x if x
+                    == format!(
+                        "{}cache_hit",
+                        namespace.map(|y| format!("{}_", y)).unwrap_or_default()
+                    ) =>
+                {
                     assert_eq!(3, metric.get_metric()[0].get_counter().get_value() as usize)
                 }
-                "cache_miss" => {
+
+                x if x
+                    == format!(
+                        "{}cache_miss",
+                        namespace.map(|y| format!("{}_", y)).unwrap_or_default()
+                    ) =>
+                {
                     assert_eq!(2, metric.get_metric()[0].get_counter().get_value() as usize)
                 }
                 x => panic!("unknown metrics {}", x),
             }
         }
+    }
+
+    #[cfg(feature = "metrics")]
+    #[test]
+    fn should_gather_metrics() {
+        metrics_test(None);
+        metrics_test(Some("test"));
     }
 
     #[quickcheck]
