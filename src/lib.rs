@@ -121,7 +121,9 @@ impl<K, V, S> fmt::Debug for WeightCache<K, V, S> {
 
 impl<K: Hash + Eq, V: Weighable> Default for WeightCache<K, V> {
     fn default() -> Self {
-        WeightCache::<K, V, RandomState>::new(NonZeroUsize::new(usize::MAX).expect("MAX > 0"))
+        WeightCache::<K, V, RandomState>::new(
+            NonZeroUsize::new(usize::max_value()).expect("MAX > 0"),
+        )
     }
 }
 
@@ -333,7 +335,8 @@ mod test {
     #[test]
     fn should_not_evict_under_max_size() {
         let xs: Vec<_> = (0..10000).map(HeavyWeight).collect();
-        let mut cache = WeightCache::<usize, HeavyWeight>::new(usize::MAX.try_into().unwrap());
+        let mut cache =
+            WeightCache::<usize, HeavyWeight>::new(usize::max_value().try_into().unwrap());
         for (k, v) in xs.iter().enumerate() {
             cache.put(k, v.clone()).expect("empty")
         }
