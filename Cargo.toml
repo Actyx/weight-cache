@@ -1,6 +1,6 @@
 [package]
 name = "weight-cache"
-version = "0.2.2"
+version = "0.2.3"
 authors = ["Actyx AG <developer@actyx.com>", "wngr <oliver@wngr.de>"]
 edition = "2018"
 repository = "https://github.com/Actyx/weight-cache"
